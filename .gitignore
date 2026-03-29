@@ -1,0 +1,20 @@
+# Credentials – niemals einchecken!
+pv-logger/.env
+
+# Docker-Volumes (persistente Laufzeitdaten)
+pv-logger/postgres_data/
+pv-logger/n8n_data/
+pv-logger/pgadmin_data/
+
+# Backup-Dateien
+pv-logger/backups/
+backups/
+
+# Testdaten (lokale Entwicklungsdaten)
+pv-logger/Testdaten/
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# macOS
+.DS_Store

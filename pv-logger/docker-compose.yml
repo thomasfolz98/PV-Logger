@@ -1,0 +1,78 @@
+services:
+  # 1. Die Datenbank (PostgreSQL)
+  housecontrol-db:
+    image: postgres:17-bullseye
+    container_name: housecontrol-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST_AUTH_METHOD: password
+    ports:
+      - "9980:5432"
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+
+  # 2. Die Verwaltungsoberfläche (pgAdmin)
+  pgadminconsole:
+    image: elestio/pgadmin:latest
+    restart: always
+    container_name: pgadminconsole
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${ADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${ADMIN_PASSWORD}
+      PGADMIN_LISTEN_PORT: 8080
+    ports:
+      - "9081:8080"
+    depends_on:
+      - housecontrol-db
+    volumes:
+      - ./pgadmin_data:/var/lib/pgadmin
+
+  # 3. Das Workflow-Tool (n8n)
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+      - TZ=${TZ}
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+      - N8N_RUNNERS_ENABLED=true
+      # Datenbank-Verbindung (intern zu housecontrol-db)
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=housecontrol-db
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=housecontrol-db
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+      # WICHTIG: Hier steht jetzt deine feste Ngrok-Adresse
+      - WEBHOOK_URL=https://finnegan-distorted-scenographically.ngrok-free.dev
+      # NEU: Erlaubt Login über http://folzpi.local
+      - N8N_SECURE_COOKIE=false
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+      - ./Testdaten:/Testdaten
+    depends_on:
+      - housecontrol-db
+    restart: unless-stopped
+
+  # 4. Der Ngrok Tunnel
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: ngrok
+    restart: unless-stopped
+    environment:
+      # Token kommt aus der .env Datei
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    command:
+      # Wir binden deine feste Domain an den n8n Container
+      - "http"
+      - "--domain=finnegan-distorted-scenographically.ngrok-free.dev"
+      - "n8n:5678"
+    ports:
+      - "4040:4040" # Dashboard zur Kontrolle
+    depends_on:
+      - n8n

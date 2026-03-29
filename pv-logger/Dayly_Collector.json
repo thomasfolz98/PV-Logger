@@ -1,0 +1,241 @@
+{
+  "name": "Dayly_Collector",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 10
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -256,
+        -160
+      ],
+      "id": "d00d0a4d-6465-4a0c-a7ae-3ec743c168d6",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "http://INV009199540008/yields.json?_=",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        336,
+        -160
+      ],
+      "id": "c94e69b5-2e66-4120-9e73-53b8befaa3a4",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Zugriff auf die Daten der vorherigen Nodes\n// \"Postgres1\" muss exakt so heißen wie dein Postgres-Node aus Schritt 1!\n// Falls er anders heißt, passe den Namen hier an: $('DeinPostgresNodeName').first().json.last_date\nconst lastDateStr = $('Postgres').first().json.last_date; \nconst apiData = $input.first().json; // Daten vom HTTP Request\n\n// 2. Hilfsfunktionen für Datum\nfunction addDays(dateStr, days) {\n  const date = new Date(dateStr);\n  date.setDate(date.getDate() + days);\n  return date.toISOString().split('T')[0];\n}\n\nfunction getYesterday() {\n  const date = new Date();\n  date.setDate(date.getDate() - 1);\n  return date.toISOString().split('T')[0];\n}\n\n// 3. Start- und Enddatum bestimmen\nlet nextDateToFetch;\nif (!lastDateStr) {\n  // Fallback: Wenn DB leer ist, hole nur gestern (oder ein festes Startdatum setzen)\n  nextDateToFetch = getYesterday(); \n} else {\n  nextDateToFetch = addDays(lastDateStr, 1);\n}\n\nconst yesterday = getYesterday();\nconst results = [];\n\n// 4. Daten-Container vorbereiten (aus dem API JSON)\nconst datasets = apiData.MonthCurves.Datasets;\nconst unit = apiData.MonthCurves.Unit;\n\n// Hilfsfunktion zum Extrahieren (ähnlich wie vorher, aber robust für Monate)\nfunction getVal(type, dateStr) {\n  const dataset = datasets.find(d => d.Type === type);\n  if (!dataset) return null;\n  \n  const monthStr = dateStr.substring(0, 7); // \"2023-10\"\n  const day = parseInt(dateStr.substring(8, 10), 10);\n  \n  const monthData = dataset.Data.find(d => d.Timestamp === monthStr);\n  if (monthData && monthData.Data && monthData.Data[day-1] !== undefined) {\n    return monthData.Data[day-1];\n  }\n  return null;\n}\n\n// 5. LOOP: Von \"letztes DB Datum + 1\" bis \"Gestern\"\nwhile (nextDateToFetch <= yesterday) {\n  \n  const prod = getVal(\"Produced\", nextDateToFetch);\n  const cons = getVal(\"Consumed\", nextDateToFetch);\n  const inj  = getVal(\"Injected\", nextDateToFetch);\n\n  // Nur hinzufügen, wenn wir Daten gefunden haben (API hat evtl. nicht unendlich Historie)\n  if (prod !== null && cons !== null && inj !== null) {\n    results.push({\n      json: {\n        date_of_production: nextDateToFetch,\n        produced: prod,\n        consumed: cons,\n        injected: inj,\n        unit: unit\n      }\n    });\n  }\n  \n  // Tag hochzählen\n  nextDateToFetch = addDays(nextDateToFetch, 1);\n  \n  // Sicherheits-Break (falls Loop endlos läuft, z.B. max 365 Tage)\n  if (results.length > 365) break; \n}\n\n// 6. Rückgabe: n8n wird den nächsten Node nun für JEDEN Eintrag in diesem Array ausführen\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        -160
+      ],
+      "id": "955a6ab9-fa48-47b6-8b9f-1541ef5c1711",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT MAX(date_of_production)::text as last_date FROM production_data;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        80,
+        -160
+      ],
+      "id": "ba0ab29d-60c4-4147-a1c0-0577e4cf95cf",
+      "name": "Postgres",
+      "credentials": {
+        "postgres": {
+          "id": "xmu2LK3ctpAgCkSB",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "production_data",
+          "mode": "list",
+          "cachedResultName": "production_data"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "produced": "={{ $json.produced }}",
+            "consumed": "={{ $json.consumed }}",
+            "injected": "={{ $json.injected }}",
+            "date_of_production": "={{ $json.date_of_production }}",
+            "unit": "={{ $json.unit }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "date_of_production",
+              "displayName": "date_of_production",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "produced",
+              "displayName": "produced",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "consumed",
+              "displayName": "consumed",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "injected",
+              "displayName": "injected",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "unit",
+              "displayName": "unit",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "skipOnConflict": true
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        848,
+        -160
+      ],
+      "id": "c36e939b-f0ce-4202-9d3a-1f063bbad47c",
+      "name": "Insert rows in a table",
+      "executeOnce": false,
+      "credentials": {
+        "postgres": {
+          "id": "xmu2LK3ctpAgCkSB",
+          "name": "Postgres account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Postgres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "e4b9096c-1c8f-40cd-90d7-97475d1e2f10",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0e524eb8842242b03c875926a2e412f5d428e03636ab17eddbf9ca8f50c4708c"
+  },
+  "id": "NsatqvUV3MWGyOIF",
+  "tags": []
+}
