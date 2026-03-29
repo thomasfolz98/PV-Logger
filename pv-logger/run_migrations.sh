@@ -34,9 +34,14 @@ for sql_file in $(ls "$MIGRATIONS_DIR"/*.sql | sort); do
     echo "  ✓ $migration – bereits angewendet"
   else
     echo "  → Wende an: $migration ..."
-    docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" "$DB_NAME" < "$sql_file"
-    docker exec "$DB_CONTAINER" psql -U "$DB_USER" "$DB_NAME" -c \
-      "INSERT INTO applied_migrations (name) VALUES ('$migration')" > /dev/null
-    echo "  ✓ $migration – erfolgreich angewendet"
+    if docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" "$DB_NAME" \
+        --set ON_ERROR_STOP=on < "$sql_file"; then
+      docker exec "$DB_CONTAINER" psql -U "$DB_USER" "$DB_NAME" -c \
+        "INSERT INTO applied_migrations (name) VALUES ('$migration')" > /dev/null
+      echo "  ✓ $migration – erfolgreich angewendet"
+    else
+      echo "  ✗ FEHLER bei $migration – nicht als angewendet markiert" >&2
+      exit 1
+    fi
   fi
 done
