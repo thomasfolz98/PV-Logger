@@ -16,6 +16,7 @@ pv-logger/Testdaten/
 
 # Claude Code local settings (Memory, agents, local config)
 .claude/
+CLAUDE.md
 
 # macOS
 .DS_Store
