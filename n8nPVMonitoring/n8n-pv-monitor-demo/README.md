@@ -97,6 +97,27 @@ Danach `make restart` ausführen, damit n8n die neuen Werte übernimmt.
 
 ---
 
+## Claude API einrichten (optional, für KI-Auswertung)
+
+Für den KI-Workflow wird ein Anthropic API Key benötigt:
+
+**1. Key erstellen:**
+- Auf [console.anthropic.com](https://console.anthropic.com) registrieren / einloggen
+- Unter *API Keys* → *Create Key* einen neuen Key anlegen
+- Den Key kopieren → `ANTHROPIC_API_KEY=` in `.env` eintragen
+
+**2. Key in n8n hinterlegen:**
+- KI-Workflow öffnen → HTTP-Request-Node *"Claude API"* anklicken
+- Im Tab *Headers*: Wert des Headers `x-api-key` auf den kopierten Key setzen
+
+Danach `make restart` ausführen.
+
+> **Hinweis:** Die Nutzung der Claude API ist kostenpflichtig (Pay-as-you-go).
+> Für diesen Workflow fallen bei täglicher Ausführung Cent-Beträge an.
+> Guthaben aufladen unter *console.anthropic.com → Billing*.
+
+---
+
 ## Workflows importieren
 
 Nach dem ersten Start von n8n (http://localhost:5678):
