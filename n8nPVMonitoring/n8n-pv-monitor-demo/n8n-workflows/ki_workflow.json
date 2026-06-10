@@ -1,0 +1,177 @@
+{
+  "name": "PV Monitor – KI Tagesauswertung",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 21 * * *"
+            }
+          ]
+        }
+      },
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "name": "Täglich 21:00 Uhr",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  to_char(date_trunc('hour', ts), 'HH24:MI') AS stunde,\n  ROUND(AVG(power_w))::integer              AS avg_power_w,\n  MAX(energy_wh) - MIN(energy_wh)           AS energie_wh\nFROM pv_readings\nWHERE ts >= CURRENT_DATE\nGROUP BY date_trunc('hour', ts)\nORDER BY date_trunc('hour', ts)",
+        "options": {}
+      },
+      "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "name": "Tageswerte aus DB lesen",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [220, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PV Monitor DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Stundenwerte als lesbaren String für den KI-Prompt aufbereiten\nconst rows = $input.all();\n\nif (rows.length === 0) {\n  return [{ json: { prompt: 'Heute wurden keine PV-Daten erfasst.' } }];\n}\n\nconst lines = rows.map(r =>\n  `${r.json.stunde} Uhr | ${r.json.avg_power_w} W | ${r.json.energie_wh} Wh`\n);\n\nconst dataBlock = lines.join('\\n');\n\nconst prompt = `Analysiere diese stündlichen PV-Ertragsdaten von heute und schreibe eine kurze deutsche Zusammenfassung für den Anlagenbesitzer (maximal 5 Sätze).\n\nDaten (stündlich, Format: Uhrzeit | Durchschnittsleistung W | Energie Wh):\n${dataBlock}\n\nGib folgendes an:\n- Gesamtertrag des Tages in kWh\n- Beste Stunde (Uhrzeit + Leistung)\n- Auffällige Einbrüche falls vorhanden\n- Kurze Einschätzung ob der Tag gut, durchschnittlich oder schwach war\n\nSchreibe direkt und ohne Einleitung, als würdest du dem Besitzer eine WhatsApp-Nachricht schicken.`;\n\nreturn [{ json: { prompt } }];"
+      },
+      "id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+      "name": "Prompt aufbauen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-haiku-4-5-20251001\",\n  \"max_tokens\": 300,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.prompt) }}\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+      "name": "Claude API aufrufen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Antwort-Text aus der Claude API Response extrahieren\nconst response = $input.first().json;\nconst text = response?.content?.[0]?.text || 'Keine Auswertung erhalten.';\nreturn [{ json: { auswertung: text } }];"
+      },
+      "id": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+      "name": "Antwort extrahieren",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=🌞 PV-Tagesauswertung {{ $now.toFormat('dd.MM.yyyy') }}\n\n{{ $json.auswertung }}",
+        "additionalFields": {}
+      },
+      "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "name": "Auswertung per Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1100, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "2",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Täglich 21:00 Uhr": {
+      "main": [
+        [
+          {
+            "node": "Tageswerte aus DB lesen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tageswerte aus DB lesen": {
+      "main": [
+        [
+          {
+            "node": "Prompt aufbauen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prompt aufbauen": {
+      "main": [
+        [
+          {
+            "node": "Claude API aufrufen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude API aufrufen": {
+      "main": [
+        [
+          {
+            "node": "Antwort extrahieren",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Antwort extrahieren": {
+      "main": [
+        [
+          {
+            "node": "Auswertung per Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "pvmonitor-ki-0001",
+  "meta": {
+    "instanceId": "demo",
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

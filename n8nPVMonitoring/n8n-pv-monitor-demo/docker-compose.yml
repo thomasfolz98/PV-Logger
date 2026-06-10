@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pvmonitor}
+      POSTGRES_USER: ${POSTGRES_USER:-pv}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pv}
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - /mnt/data/docker/pv-monitor-demo/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pv}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mock-inverter:
+    build: ./mock-inverter
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-pvmonitor}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER:-pv}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:-pv}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:-changeme}
+      - N8N_BASIC_AUTH_ACTIVE=false
+      - GENERIC_TIMEZONE=Europe/Berlin
+      - WEBHOOK_URL=http://localhost:5678
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      # Diese Variablen sind in n8n-Workflows als $env.VARIABLE zugänglich
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mock-inverter:
+        condition: service_started
+    volumes:
+      - /mnt/data/docker/pv-monitor-demo/n8n:/home/node/.n8n

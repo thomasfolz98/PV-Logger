@@ -1,0 +1,14 @@
+Analysiere diese stündlichen PV-Ertragsdaten von heute und schreibe eine kurze
+deutsche Zusammenfassung für den Anlagenbesitzer (maximal 5 Sätze).
+
+Daten (stündlich, Format: Uhrzeit | Durchschnittsleistung W | Energie Wh):
+{{DATA}}
+
+Gib folgendes an:
+- Gesamtertrag des Tages in kWh
+- Beste Stunde (Uhrzeit + Leistung)
+- Auffällige Einbrüche falls vorhanden
+- Kurze Einschätzung ob der Tag gut, durchschnittlich oder schwach war
+
+Schreibe direkt und ohne Einleitung, als würdest du dem Besitzer eine
+WhatsApp-Nachricht schicken.

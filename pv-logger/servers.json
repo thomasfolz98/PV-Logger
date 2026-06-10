@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "HouseControl DB",
+      "Group": "Servers",
+      "Host": "housecontrol-db",
+      "Port": 5432,
+      "MaintenanceDB": "housecontrol-db",
+      "Username": "housecontrol_user",
+      "SSLMode": "prefer",
+      "PassFile": "/pgpassfile"
+    }
+  }
+}

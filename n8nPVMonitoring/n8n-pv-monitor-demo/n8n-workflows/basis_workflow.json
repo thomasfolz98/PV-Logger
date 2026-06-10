@@ -1,0 +1,184 @@
+{
+  "name": "PV Monitor – Basis Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Alle 5 Minuten",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-inverter:8000/api/realtime",
+        "options": {}
+      },
+      "id": "22222222-2222-2222-2222-222222222222",
+      "name": "Wechselrichterdaten holen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Felder umbenennen und Typ sicherstellen\nconst raw = $input.first().json;\nreturn [{\n  json: {\n    power_w:    parseInt(raw.power_w)    || 0,\n    energy_wh:  parseInt(raw.energy_today_wh) || 0,\n    temp_c:     parseFloat(raw.temperature_c) || 0,\n    status:     raw.status\n  }\n}];"
+      },
+      "id": "33333333-3333-3333-3333-333333333333",
+      "name": "Daten normalisieren",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO pv_readings (power_w, energy_wh, temp_c)\nVALUES ({{ $json.power_w }}, {{ $json.energy_wh }}, {{ $json.temp_c }})",
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444444",
+      "name": "In PostgreSQL speichern",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [660, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PV Monitor DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-power",
+              "leftValue": "={{ $json.power_w }}",
+              "rightValue": 50,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            },
+            {
+              "id": "cond-hour",
+              "leftValue": "={{ new Date().getHours() }}",
+              "rightValue": 9,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "55555555-5555-5555-5555-555555555555",
+      "name": "Ausfall erkannt?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=⚠️ PV-Anlage: Unerwarteter Ausfall!\n\nLeistung: {{ $json.power_w }} W (Schwellenwert: 50 W)\nZeit: {{ $now.toISO() }}\n\nBitte Wechselrichter prüfen.",
+        "additionalFields": {}
+      },
+      "id": "66666666-6666-6666-6666-666666666666",
+      "name": "Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1100, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "2",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Alle 5 Minuten": {
+      "main": [
+        [
+          {
+            "node": "Wechselrichterdaten holen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wechselrichterdaten holen": {
+      "main": [
+        [
+          {
+            "node": "Daten normalisieren",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daten normalisieren": {
+      "main": [
+        [
+          {
+            "node": "In PostgreSQL speichern",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "In PostgreSQL speichern": {
+      "main": [
+        [
+          {
+            "node": "Ausfall erkannt?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ausfall erkannt?": {
+      "main": [
+        [
+          {
+            "node": "Telegram Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "pvmonitor-basis-0001",
+  "meta": {
+    "instanceId": "demo",
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

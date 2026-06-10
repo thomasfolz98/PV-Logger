@@ -1,5 +1,6 @@
 # Credentials – niemals einchecken!
 pv-logger/.env
+n8nPVMonitoring/n8n-pv-monitor-demo/.env
 
 # Docker-Volumes (persistente Laufzeitdaten)
 pv-logger/postgres_data/
@@ -13,8 +14,14 @@ backups/
 # Testdaten (lokale Entwicklungsdaten)
 pv-logger/Testdaten/
 
-# Claude Code local settings
-.claude/settings.local.json
+# Claude Code local settings (Memory, agents, local config)
+.claude/
 
 # macOS
 .DS_Store
+._*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

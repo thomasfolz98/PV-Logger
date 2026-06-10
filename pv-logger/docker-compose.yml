@@ -15,20 +15,30 @@ services:
       - ./postgres_data:/var/lib/postgresql/data
 
   # 2. Die Verwaltungsoberfläche (pgAdmin)
+  # Offizielles dpage/pgadmin4-Image mit ARM64-Support (Multi-Arch seit v6.x).
+  # elestio/pgadmin wurde entfernt — hatte keine zuverlässige ARM64-Unterstützung
+  # und lieferte auf dem Pi leere Seiten (kaputte JS/CSS-Pfade unter QEMU-Emulation).
+  # Volume-Hinweis: pgAdmin laeuft intern als UID 5050. Beim ersten Start legt Docker
+  # das Verzeichnis pgadmin_data/ als root an. Falls die UI nach dem Start nicht laedt,
+  # einmalig auf dem Pi ausfuehren:
+  #   sudo chown -R 5050:5050 /mnt/ssd/docker/pv-logger/pgadmin_data
   pgadminconsole:
-    image: elestio/pgadmin:latest
-    restart: always
+    image: dpage/pgadmin4:9
+    platform: linux/arm64
+    restart: unless-stopped
     container_name: pgadminconsole
     environment:
       PGADMIN_DEFAULT_EMAIL: ${ADMIN_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${ADMIN_PASSWORD}
       PGADMIN_LISTEN_PORT: 8080
+      PGADMIN_SERVER_JSON_FILE: /pgadmin4/servers.json
     ports:
       - "9081:8080"
     depends_on:
       - housecontrol-db
     volumes:
       - ./pgadmin_data:/var/lib/pgadmin
+      - ./servers.json:/pgadmin4/servers.json:ro
 
   # 3. Das Workflow-Tool (n8n)
   n8n:
